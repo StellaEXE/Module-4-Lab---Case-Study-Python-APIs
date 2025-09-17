@@ -1,55 +1,75 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
 
+# Initialize the Flask application
 app = Flask(__name__)
 
-books = [
-    {
-        'id': 1,
-        'book_name': 'War and Peace',
-        'author': 'Leo Tolstoy',
-        'publisher': 'Russian Publishing House'
-    },
-    {
-        'id': 2,
-        'book_name': 'The Great Gatsby',
-        'author': 'F. Scott Fitzgerald',
-        'publisher': 'Charles Scribner\'s Sons'
-    }
-]
+# Configure the database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///books.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-@app.route('/books', methods=['GET'])
-def get_books():
-    return jsonify(books)
+# Define the Book model
+class Book(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    book_name = db.Column(db.String(100), nullable=False)
+    author = db.Column(db.String(100), nullable=False)
+    publisher = db.Column(db.String(100), nullable=False)
 
-@app.route('/books/<int:id>', methods=['GET'])
-def get_book(id):
-    book = [book for book in books if book['id'] == id]
-    return jsonify(book)
+    def to_dict(self):
+        """Convert the Book object to a dictionary for JSON serialization."""
+        return {
+            'id': self.id,
+            'book_name': self.book_name,
+            'author': self.author,
+            'publisher': self.publisher
+        }
 
-@app.route('/books', methods=['POST'])
-def add_book():
-    book = {
-        'id': books[-1]['id'] + 1,
-        'book_name': request.json['book_name'],
-        'author': request.json['author'],
-        'publisher': request.json['publisher']
-    }
-    books.append(book)
-    return jsonify(book)
+# Create the database and tables
+with app.app_context():
+    db.create_all()
 
-@app.route('/books/<int:id>', methods=['PUT'])
-def update_book(id):
-    book = [book for book in books if book['id'] == id]
-    book[0]['book_name'] = request.json.get('book_name', book[0]['book_name'])
-    book[0]['author'] = request.json.get('author', book[0]['author'])
-    book[0]['publisher'] = request.json.get('publisher', book[0]['publisher'])
-    return jsonify(book[0])
+# ---- API ROUTES ----
 
-@app.route('/books/<int:id>', methods=['DELETE'])
-def delete_book(id):
-    book = [book for book in books if book['id'] == id]
-    books.remove(book[0])
-    return jsonify({'result': 'Book deleted'})
+# GET all books or POST a new book
+@app.route('/books', methods=['GET', 'POST'])
+def handle_books():
+    if request.method == 'POST':
+        data = request.json
+        new_book = Book(
+            book_name=data['book_name'],
+            author=data['author'],
+            publisher=data['publisher']
+        )
+        db.session.add(new_book)
+        db.session.commit()
+        return jsonify(new_book.to_dict()), 201
+    
+    else:  # GET request
+        books = Book.query.all()
+        return jsonify([book.to_dict() for book in books])
 
+# GET, PUT, or DELETE a single book by ID
+@app.route('/books/<int:id>', methods=['GET', 'PUT', 'DELETE'])
+def handle_book(id):
+    book = Book.query.get_or_404(id)
+
+    if request.method == 'GET':
+        return jsonify(book.to_dict())
+
+    elif request.method == 'PUT':
+        data = request.json
+        book.book_name = data.get('book_name', book.book_name)
+        book.author = data.get('author', book.author)
+        book.publisher = data.get('publisher', book.publisher)
+        db.session.commit()
+        return jsonify(book.to_dict())
+
+    elif request.method == 'DELETE':
+        db.session.delete(book)
+        db.session.commit()
+        return jsonify({'message': 'Book deleted successfully'})
+
+# Run the application
 if __name__ == '__main__':
     app.run(debug=True)
