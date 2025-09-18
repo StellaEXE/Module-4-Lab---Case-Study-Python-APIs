@@ -35,6 +35,19 @@ def create_book():
     db.session.commit()
     return jsonify(new_book.to_dict()), 201    
 
+@app.route('/books', methods=['GET'])
+def get_all_books():
+    books = Book.query.all()
+    output = []
+    for book in books:
+        output.append({
+            'id': book.id,
+            'book_name': book.book_name,
+            'author': book.author,
+            'publisher': book.publisher
+        })
+    return jsonify({'books': output})
+
 @app.route('/books/<int:book_id>', methods=['PUT'])
 def update_book(book_id):
     book = Book.query.get_or_404(book_id)
@@ -53,4 +66,5 @@ def delete_book(book_id):
     return jsonify({'message': 'Book deleted successfully'})
 
 if __name__ == '__main__':
+
     app.run(debug=True)
